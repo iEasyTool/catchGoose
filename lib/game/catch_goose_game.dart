@@ -17,12 +17,18 @@ import 'components/bin_background.dart';
 class CatchGooseGame extends FlameGame with DragCallbacks {
   static const int slotCapacity = 7;
   static const double roundSeconds = 180;
+  static const List<String> levelFiles = [
+    'levels/level_001.json',
+    'levels/level_002.json',
+    'levels/level_003.json',
+    'levels/level_004.json',
+    'levels/level_005.json',
+  ];
 
   SlotBar? _slotBar;
   TextComponent? _timerText;
   TextComponent? _levelText;
   TextComponent? _stateText;
-  TextComponent? _bannerText;
   HudComponent? _hud;
   final Map<String, Sprite> _sprites = {};
 
@@ -36,6 +42,9 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
   Vector2? _lastPanPosition;
   Rect _binRect = Rect.zero;
   bool _selectionCanceled = false;
+  int _levelIndex = 0;
+  GameResult? _lastResult;
+  String _resultMessage = '';
 
   @override
   Future<void> onLoad() async {
@@ -84,24 +93,11 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
       anchor: Anchor.center,
     )..priority = 13000;
 
-    _bannerText = TextComponent(
-      text: '买点调料',
-      textRenderer: TextPaint(
-        style: const TextStyle(
-          color: Color(0xFFFFFFFF),
-          fontSize: 20,
-          fontWeight: FontWeight.w700,
-        ),
-      ),
-      anchor: Anchor.center,
-    )..priority = 12000;
-
     add(_hud!);
     add(_slotBar!);
     add(_timerText!);
     add(_levelText!);
     add(_stateText!);
-    add(_bannerText!);
 
     await _loadLevel();
     _layout();
@@ -128,7 +124,7 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
     _timeRemaining -= dt;
     if (_timeRemaining <= 0) {
       _timeRemaining = 0;
-      _triggerGameOver('时间到');
+      _triggerGameOver('时间到', win: false);
     }
     _timerText?.text = _formatTime(_timeRemaining);
   }
@@ -220,7 +216,6 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
 
     _timerText?.position = Vector2(size.x / 2 - 42, 32);
     _levelText?.position = Vector2(28, 32);
-    _bannerText?.position = Vector2(size.x / 2, 114);
     _stateText?.position = Vector2(size.x / 2, size.y / 2);
   }
 
@@ -323,7 +318,7 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
       ),
     );
     if (!accepted) {
-      _triggerGameOver('槽位已满');
+      _triggerGameOver('槽位已满', win: false);
       _cancelSelection();
       return;
     }
@@ -351,9 +346,9 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
     }
 
     if (_remainingItems <= 0) {
-      _triggerGameOver('通关');
+      _triggerGameOver('通关', win: true);
     } else if (slotBar.isFull && matched.isEmpty) {
-      _triggerGameOver('槽位已满');
+      _triggerGameOver('槽位已满', win: false);
     }
   }
 
@@ -420,9 +415,12 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
     return Sprite(image);
   }
 
-  void _triggerGameOver(String message) {
+  void _triggerGameOver(String message, {required bool win}) {
     _isGameOver = true;
+    _resultMessage = message;
+    _lastResult = win ? GameResult.win : GameResult.lose;
     _stateText?.text = message;
+    _showResultOverlay();
   }
 
   String _formatTime(double seconds) {
@@ -435,7 +433,7 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
   late final List<_LevelItem> _levelItems = [];
 
   Future<void> _loadLevel() async {
-    final raw = await assets.readFile('levels/level_001.json');
+    final raw = await assets.readFile(levelFiles[_levelIndex]);
     final data = jsonDecode(raw) as Map<String, dynamic>;
     final levelName = data['levelName'] as String? ?? '第1关';
     _levelTimerSeconds = (data['timerSeconds'] as num?)?.toDouble() ?? roundSeconds;
@@ -456,7 +454,63 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
       }));
     _levelLoaded = true;
   }
+
+  void _showResultOverlay() {
+    if (!overlays.isActive('result')) {
+      overlays.add('result');
+    }
+  }
+
+  void _hideResultOverlay() {
+    if (overlays.isActive('result')) {
+      overlays.remove('result');
+    }
+  }
+
+  bool get isWin => _lastResult == GameResult.win;
+  String get resultMessage => _resultMessage;
+  bool get hasNextLevel => _levelIndex < levelFiles.length - 1;
+
+  Future<void> restartLevel() async {
+    _hideResultOverlay();
+    await _resetLevel();
+  }
+
+  Future<void> nextLevel() async {
+    if (!hasNextLevel) {
+      await restartLevel();
+      return;
+    }
+    _levelIndex += 1;
+    _hideResultOverlay();
+    await _resetLevel();
+  }
+
+  Future<void> _resetLevel() async {
+    _isGameOver = false;
+    _lastResult = null;
+    _resultMessage = '';
+    _selectionCanceled = false;
+    _activeItem?.clearHighlight();
+    _activeItem = null;
+    _lastPanPosition = null;
+    _remainingItems = 0;
+    _spawned = false;
+    _levelLoaded = false;
+    _stateText?.text = '';
+    _slotBar?.clear();
+
+    children.whereType<ItemComponent>().toList().forEach((c) => c.removeFromParent());
+    children.whereType<FlyingItem>().toList().forEach((c) => c.removeFromParent());
+    children.whereType<MatchPop>().toList().forEach((c) => c.removeFromParent());
+    children.whereType<BinBackground>().toList().forEach((c) => c.removeFromParent());
+
+    await _loadLevel();
+    _ensureSpawned();
+  }
 }
+
+enum GameResult { win, lose }
 
 class _LevelItem {
   _LevelItem({

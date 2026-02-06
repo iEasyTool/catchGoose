@@ -59,6 +59,10 @@ flutter:
   uses-material-design: true
   assets:
     - assets/levels/level_001.json
+    - assets/levels/level_002.json
+    - assets/levels/level_003.json
+    - assets/levels/level_004.json
+    - assets/levels/level_005.json
 
   # To add assets to your application, add an assets section, like this:
   # assets:

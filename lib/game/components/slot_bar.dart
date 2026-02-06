@@ -29,6 +29,8 @@ class SlotBar extends PositionComponent {
 
   bool get isFull => items.length >= capacity;
 
+  void clear() => items.clear();
+
   bool addItem(SlotItem item) {
     if (items.length >= capacity) {
       return false;
