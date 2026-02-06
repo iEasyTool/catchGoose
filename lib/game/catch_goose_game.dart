@@ -45,12 +45,17 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
   int _levelIndex = 0;
   GameResult? _lastResult;
   String _resultMessage = '';
+  BinStyle? _binStyle;
+  int _binStyleIndex = 0;
+  BinBackground? _binBackground;
 
   @override
   Future<void> onLoad() async {
     await super.onLoad();
 
     await _generateSprites();
+    _binStyleIndex = 0;
+    _binStyle = BinStyle.values[_binStyleIndex % BinStyle.values.length];
 
     _hud = HudComponent(size: size);
     _slotBar = SlotBar(
@@ -91,7 +96,7 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
         ),
       ),
       anchor: Anchor.center,
-    )..priority = 13000;
+    )..priority = 15000;
 
     add(_hud!);
     add(_slotBar!);
@@ -141,6 +146,9 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
     final items = children.whereType<ItemComponent>().toList();
     final hits = items.where((item) => item.containsPoint(event.localPosition)).toList();
     if (hits.isEmpty) {
+      if (_binRect.contains(Offset(event.localPosition.x, event.localPosition.y))) {
+        _cycleBinStyle();
+      }
       return;
     }
     hits.sort((a, b) {
@@ -245,10 +253,13 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
       add(item);
     }
 
+    final style = _binStyle ?? BinStyle.values[_levelIndex % BinStyle.values.length];
     final binBackground = BinBackground(
       position: Vector2(_binRect.left, _binRect.top),
       size: Vector2(_binRect.width, _binRect.height),
+      style: style,
     );
+    _binBackground = binBackground;
     add(binBackground);
   }
 
@@ -339,7 +350,7 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
           sprite: match.item.sprite,
           position: worldCenter,
           size: Vector2(56, 56),
-        );
+        )..priority = 14000;
         add(pop);
         pop.play(() => pop.removeFromParent());
       }
@@ -499,14 +510,30 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
     _levelLoaded = false;
     _stateText?.text = '';
     _slotBar?.clear();
+    _binStyleIndex = (_binStyleIndex + 1) % BinStyle.values.length;
+    _binStyle = BinStyle.values[_binStyleIndex];
 
     children.whereType<ItemComponent>().toList().forEach((c) => c.removeFromParent());
     children.whereType<FlyingItem>().toList().forEach((c) => c.removeFromParent());
     children.whereType<MatchPop>().toList().forEach((c) => c.removeFromParent());
     children.whereType<BinBackground>().toList().forEach((c) => c.removeFromParent());
+    _binBackground = null;
 
     await _loadLevel();
     _ensureSpawned();
+  }
+
+  void _cycleBinStyle() {
+    _binStyleIndex = (_binStyleIndex + 1) % BinStyle.values.length;
+    _binStyle = BinStyle.values[_binStyleIndex];
+    _binBackground?.removeFromParent();
+    final binBackground = BinBackground(
+      position: Vector2(_binRect.left, _binRect.top),
+      size: Vector2(_binRect.width, _binRect.height),
+      style: _binStyle,
+    );
+    _binBackground = binBackground;
+    add(binBackground);
   }
 }
 

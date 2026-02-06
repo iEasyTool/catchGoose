@@ -15,13 +15,6 @@ class HudComponent extends PositionComponent {
       paint,
     );
 
-    final bannerRect = Rect.fromLTWH(16, 92, size.x - 32, 44);
-    final bannerPaint = Paint()..color = const Color(0xFFE65B2E);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(bannerRect, const Radius.circular(18)),
-      bannerPaint,
-    );
-
     final trayRect = Rect.fromLTWH(16, size.y - 170, size.x - 32, 160);
     final trayPaint = Paint()..color = const Color(0xFF9C632B);
     canvas.drawRRect(
