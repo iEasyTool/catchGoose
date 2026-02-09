@@ -1,13 +1,17 @@
 import 'dart:ui';
 
 import 'package:flame/components.dart';
-import 'package:flutter/cupertino.dart';
 
 class SlotItem {
-  SlotItem({required this.typeId, required this.sprite});
+  SlotItem({
+    required this.typeId,
+    required this.sprite,
+    required this.sourceItemId,
+  });
 
   final String typeId;
   final Sprite sprite;
+  final String sourceItemId;
 }
 
 class ResolvedMatchItem {
@@ -31,12 +35,15 @@ class SlotBar extends PositionComponent {
 
   void clear() => items.clear();
 
-  bool addItem(SlotItem item) {
+  int insertItem(SlotItem item) {
     if (items.length >= capacity) {
-      return false;
+      return -1;
     }
-    items.add(item);
-    return true;
+
+    final existingIndex = items.indexWhere((element) => element.typeId == item.typeId);
+    final insertIndex = existingIndex == -1 ? items.length : existingIndex + 1;
+    items.insert(insertIndex, item);
+    return insertIndex;
   }
 
   List<ResolvedMatchItem> resolveMatches() {
@@ -87,12 +94,23 @@ class SlotBar extends PositionComponent {
 
   @override
   void render(Canvas canvas) {
-    final bgPaint = Paint()..color = const Color(0xFFB77D3B);
-    final slotPaint = Paint()..color = const Color(0xFFEED7B1);
-    canvas.drawRRect(
-      RRect.fromRectAndRadius(size.toRect(), const Radius.circular(16)),
-      bgPaint,
-    );
+    final bgPaint = Paint()
+      ..color = const Color(0x12000000)
+      ..style = PaintingStyle.fill;
+    final bgBorderPaint = Paint()
+      ..color = const Color(0x66EADBB3)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 2.0;
+    final slotPaint = Paint()
+      ..color = const Color(0x00000000)
+      ..style = PaintingStyle.fill;
+    final slotBorder = Paint()
+      ..color = const Color(0xEAF5E6BE)
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = 1.8;
+    final barRect = RRect.fromRectAndRadius(size.toRect(), const Radius.circular(16));
+    canvas.drawRRect(barRect, bgPaint);
+    canvas.drawRRect(barRect, bgBorderPaint);
 
     const outerPadding = 4.0;
     final cellWidth = size.x / capacity;
@@ -114,36 +132,10 @@ class SlotBar extends PositionComponent {
         RRect.fromRectAndRadius(squareRect, const Radius.circular(10)),
         slotPaint,
       );
-
-      if (i < items.length) {
-        final item = items[i];
-        const innerPadding = 4.0;
-        final itemRect = Rect.fromLTWH(
-          squareRect.left + innerPadding,
-          squareRect.top + innerPadding,
-          squareRect.width - innerPadding * 2,
-          squareRect.height - innerPadding * 2,
-        );
-        item.sprite.renderRect(canvas, itemRect);
-
-        final textPainter = TextPainter(
-          text: TextSpan(
-            text: item.typeId,
-            style: const TextStyle(
-              color: Color(0xFFFFFFFF),
-              fontSize: 16,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          textDirection: TextDirection.ltr,
-        )..layout();
-
-        final textOffset = Offset(
-          itemRect.left + (itemRect.width - textPainter.width) / 2,
-          itemRect.top + (itemRect.height - textPainter.height) / 2,
-        );
-        textPainter.paint(canvas, textOffset);
-      }
+      canvas.drawRRect(
+        RRect.fromRectAndRadius(squareRect, const Radius.circular(10)),
+        slotBorder,
+      );
     }
   }
 }

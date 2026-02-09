@@ -1,9 +1,9 @@
-import 'dart:async';
-
 import 'package:flame/game.dart';
 import 'package:flutter/material.dart';
 
 import 'game/catch_goose_game.dart';
+import 'game/catch_goose_3d_game.dart';
+import 'game/shared/game_scene_bridge.dart';
 
 void main() {
   runApp(const MyApp());
@@ -34,160 +34,93 @@ class GamePage extends StatefulWidget {
 }
 
 class _GamePageState extends State<GamePage> {
-  late final CatchGooseGame _game;
+  final GameSceneBridge _sceneBridge = GameSceneBridge();
+  late final CatchGoose3DGame _game3d;
+  late final CatchGooseGame _game2d;
 
   @override
   void initState() {
     super.initState();
-    _game = CatchGooseGame();
+    _game3d = CatchGoose3DGame(sceneBridge: _sceneBridge);
+    _game2d = CatchGooseGame(
+      sceneBridge: _sceneBridge,
+      showBinBackground: false,
+      showSlotSprite: false,
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      body: GameWidget(
-        game: _game,
-        overlayBuilderMap: {
-          'result': (context, game) => _ResultOverlay(game: game as CatchGooseGame),
-        },
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          IgnorePointer(
+            ignoring: true,
+            child: GameWidget<CatchGoose3DGame>(game: _game3d),
+          ),
+          GameWidget<CatchGooseGame>(
+            game: _game2d,
+            overlayBuilderMap: {
+              'result': (context, game) => _ResultOverlay(game: game),
+            },
+          ),
+        ],
       ),
     );
   }
 }
 
-class _ResultOverlay extends StatefulWidget {
+class _ResultOverlay extends StatelessWidget {
   const _ResultOverlay({required this.game});
 
   final CatchGooseGame game;
 
   @override
-  State<_ResultOverlay> createState() => _ResultOverlayState();
-}
-
-class _ResultOverlayState extends State<_ResultOverlay> {
-  static const int _autoSeconds = 3;
-  late int _remaining;
-  Timer? _timer;
-
-  @override
-  void initState() {
-    super.initState();
-    _remaining = _autoSeconds;
-    _timer = Timer.periodic(const Duration(seconds: 1), (timer) {
-      if (!mounted) return;
-      setState(() {
-        _remaining -= 1;
-      });
-      if (_remaining <= 0) {
-        timer.cancel();
-        _triggerAuto();
-      }
-    });
-  }
-
-  @override
-  void dispose() {
-    _timer?.cancel();
-    super.dispose();
-  }
-
-  void _triggerAuto() {
-    final game = widget.game;
-    if (game.isWin) {
-      game.nextLevel();
-    } else {
-      game.restartLevel();
-    }
-  }
-
-  @override
   Widget build(BuildContext context) {
-    final game = widget.game;
-    final isWin = game.isWin;
-    final title = isWin ? '通关成功' : '闯关失败';
-    final message = game.resultMessage;
-    return Material(
-      color: Colors.black.withOpacity(0.45),
+    final title = game.isWin ? '过关成功' : game.resultMessage;
+
+    return ColoredBox(
+      color: const Color(0x66000000),
       child: Center(
         child: Container(
-          width: 280,
-          padding: const EdgeInsets.all(20),
+          width: 290,
+          padding: const EdgeInsets.fromLTRB(20, 20, 20, 16),
           decoration: BoxDecoration(
-            gradient: const LinearGradient(
-              colors: [Color(0xFFFFE2B8), Color(0xFFFFF4DE)],
-              begin: Alignment.topCenter,
-              end: Alignment.bottomCenter,
-            ),
-            borderRadius: BorderRadius.circular(24),
-            boxShadow: const [
-              BoxShadow(
-                color: Color(0x66000000),
-                blurRadius: 18,
-                offset: Offset(0, 10),
-              ),
-            ],
+            color: const Color(0xFFF6E6CC),
+            borderRadius: BorderRadius.circular(16),
+            border: Border.all(color: const Color(0xFFB47334), width: 2),
           ),
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              Container(
-                padding: const EdgeInsets.symmetric(vertical: 8, horizontal: 16),
-                decoration: BoxDecoration(
-                  color: const Color(0xFFE0572E),
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Text(
-                  title,
-                  style: const TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w700,
-                    color: Colors.white,
-                  ),
-                ),
-              ),
               Text(
-                message,
+                title,
                 style: const TextStyle(
-                  fontSize: 16,
-                  color: Color(0xFF6A4A2D),
+                  fontSize: 24,
+                  fontWeight: FontWeight.w800,
+                  color: Color(0xFF7B2D1F),
                 ),
               ),
+              const SizedBox(height: 16),
+              if (game.hasNextLevel && game.isWin)
+                FilledButton(
+                  onPressed: game.nextLevel,
+                  style: FilledButton.styleFrom(
+                    backgroundColor: const Color(0xFFD53B2D),
+                    minimumSize: const Size(double.infinity, 44),
+                  ),
+                  child: const Text('下一关'),
+                ),
               const SizedBox(height: 8),
-              Text(
-                '${_remaining}s 后自动${isWin ? '进入下一关' : '重玩'}',
-                style: const TextStyle(
-                  fontSize: 14,
-                  color: Color(0xFF8B6A4B),
+              OutlinedButton(
+                onPressed: game.restartLevel,
+                style: OutlinedButton.styleFrom(
+                  foregroundColor: const Color(0xFF7B2D1F),
+                  side: const BorderSide(color: Color(0xFFB47334), width: 1.6),
+                  minimumSize: const Size(double.infinity, 44),
                 ),
-              ),
-              const SizedBox(height: 18),
-              Row(
-                mainAxisAlignment: MainAxisAlignment.spaceEvenly,
-                children: [
-                  ElevatedButton(
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: const Color(0xFFF1C15B),
-                      foregroundColor: const Color(0xFF6A4A2D),
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                    ),
-                    onPressed: () => game.restartLevel(),
-                    child: const Text('重玩'),
-                  ),
-                  if (isWin)
-                    ElevatedButton(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: const Color(0xFFE0572E),
-                        foregroundColor: Colors.white,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(18),
-                        ),
-                      ),
-                      onPressed: () => game.nextLevel(),
-                      child: Text(game.hasNextLevel ? '下一关' : '重新开始'),
-                    ),
-                ],
+                child: Text(game.isWin ? '重玩本关' : '重新挑战'),
               ),
             ],
           ),

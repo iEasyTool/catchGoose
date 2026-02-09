@@ -30,14 +30,23 @@ class BinBackground extends PositionComponent {
 
   void _drawRounded(Canvas canvas) {
     final rect = size.toRect();
-    final paint = Paint()..color = const Color(0xFFD46A3A);
+    final paint = Paint()..color = const Color(0xE0D46A3A);
     canvas.drawRRect(
       RRect.fromRectAndRadius(rect, const Radius.circular(24)),
       paint,
     );
 
     final insetRect = rect.deflate(8);
-    final insetPaint = Paint()..color = const Color(0xFFEB8A4A);
+    final insetPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0x0EF2A35F),
+          Color(0x08D88A4C),
+          Color(0x12B06F3E),
+        ],
+      ).createShader(insetRect);
     canvas.drawRRect(
       RRect.fromRectAndRadius(insetRect, const Radius.circular(20)),
       insetPaint,
@@ -48,11 +57,20 @@ class BinBackground extends PositionComponent {
 
   void _drawSquare(Canvas canvas) {
     final rect = size.toRect();
-    final paint = Paint()..color = const Color(0xFFB95E2E);
+    final paint = Paint()..color = const Color(0xD8B95E2E);
     canvas.drawRect(rect, paint);
 
     final insetRect = rect.deflate(6);
-    final insetPaint = Paint()..color = const Color(0xFFDD8448);
+    final insetPaint = Paint()
+      ..shader = const LinearGradient(
+        begin: Alignment.topCenter,
+        end: Alignment.bottomCenter,
+        colors: [
+          Color(0x10EFA05E),
+          Color(0x08DD8448),
+          Color(0x14A86A3C),
+        ],
+      ).createShader(insetRect);
     canvas.drawRect(insetRect, insetPaint);
 
     _drawInnerShadow(canvas, insetRect);
@@ -64,15 +82,21 @@ class BinBackground extends PositionComponent {
     final radius = rect.shortestSide / 2;
     final basketRect = Rect.fromCircle(center: center, radius: radius);
 
-    final base = Paint()..color = const Color(0xFFC97A3A);
+    final base = Paint()..color = const Color(0xD6C97A3A);
     canvas.drawOval(basketRect, base);
 
     final rimRect = basketRect.deflate(6);
-    final rimPaint = Paint()..color = const Color(0xFF9F4F28);
+    final rimPaint = Paint()..color = const Color(0xD69F4F28);
     canvas.drawOval(rimRect, rimPaint);
 
     final insetRect = basketRect.deflate(14);
-    final insetPaint = Paint()..color = const Color(0xFFE3A566);
+    final insetPaint = Paint()
+      ..shader = const RadialGradient(
+        colors: [
+          Color(0x10FFD5A0),
+          Color(0x14E3A566),
+        ],
+      ).createShader(insetRect);
     canvas.drawOval(insetRect, insetPaint);
 
     _drawInnerShadow(canvas, insetRect);
@@ -84,7 +108,7 @@ class BinBackground extends PositionComponent {
         colors: [
           const Color(0x66000000),
           const Color(0x00000000),
-          const Color(0x66000000),
+          const Color(0x4A000000),
         ],
         stops: const [0.0, 0.5, 1.0],
         begin: Alignment.topCenter,

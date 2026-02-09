@@ -31,6 +31,7 @@ dependencies:
   flutter:
     sdk: flutter
   flame: ^1.18.0
+  flame_3d: ^0.1.1+5
 
   # The following adds the Cupertino Icons font to your application.
   # Use with the CupertinoIcons class for iOS style icons.
@@ -58,11 +59,11 @@ flutter:
   # the material Icons class.
   uses-material-design: true
   assets:
-    - assets/levels/level_001.json
-    - assets/levels/level_002.json
-    - assets/levels/level_003.json
-    - assets/levels/level_004.json
-    - assets/levels/level_005.json
+    - assets/3d/
+    - assets/3d/coockie-man.glb
+    - assets/3d/sandwich-toast.glb
+    - assets/3d/toast.glb
+    - assets/levels/
 
   # To add assets to your application, add an assets section, like this:
   # assets:

@@ -8,9 +8,7 @@ class AssetsRes {
 
   static const String PROJECT_NAME = 'catchgoose';
   static const String PROJECT_VERSION = '1.0.0+1';
-  static const String LEVEL_001 = 'assets/levels/level_001.json';
-  static const String LEVEL_002 = 'assets/levels/level_002.json';
-  static const String LEVEL_003 = 'assets/levels/level_003.json';
-  static const String LEVEL_004 = 'assets/levels/level_004.json';
-  static const String LEVEL_005 = 'assets/levels/level_005.json';
+  static const String COOCKIE_MAN = 'assets/3d/coockie-man.glb';
+  static const String SANDWICH_TOAST = 'assets/3d/sandwich-toast.glb';
+  static const String TOAST = 'assets/3d/toast.glb';
 }

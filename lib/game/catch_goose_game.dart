@@ -13,8 +13,16 @@ import 'components/flying_item.dart';
 import 'components/hud_component.dart';
 import 'components/match_pop.dart';
 import 'components/bin_background.dart';
+import 'components/slot_item_component.dart';
+import 'shared/game_scene_bridge.dart';
 
 class CatchGooseGame extends FlameGame with DragCallbacks {
+  CatchGooseGame({
+    this.sceneBridge,
+    this.showBinBackground = false,
+    this.showSlotSprite = true,
+  });
+
   static const int slotCapacity = 7;
   static const double roundSeconds = 180;
   static const List<String> levelFiles = [
@@ -24,11 +32,15 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
     'levels/level_004.json',
     'levels/level_005.json',
   ];
+  final GameSceneBridge? sceneBridge;
+  final bool showBinBackground;
+  final bool showSlotSprite;
 
   SlotBar? _slotBar;
   TextComponent? _timerText;
   TextComponent? _levelText;
   TextComponent? _stateText;
+  TextComponent? _debugText;
   HudComponent? _hud;
   final Map<String, Sprite> _sprites = {};
 
@@ -48,6 +60,8 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
   BinStyle? _binStyle;
   int _binStyleIndex = 0;
   BinBackground? _binBackground;
+  final List<SlotItemComponent> _slotItemComponents = [];
+  int _itemSerial = 0;
 
   @override
   Future<void> onLoad() async {
@@ -98,11 +112,23 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
       anchor: Anchor.center,
     )..priority = 15000;
 
+    _debugText = TextComponent(
+      text: '',
+      textRenderer: TextPaint(
+        style: const TextStyle(
+          color: Color(0xFF102030),
+          fontSize: 12,
+          fontWeight: FontWeight.w600,
+        ),
+      ),
+    )..priority = 15000;
+
     add(_hud!);
     add(_slotBar!);
     add(_timerText!);
     add(_levelText!);
     add(_stateText!);
+    add(_debugText!);
 
     await _loadLevel();
     _layout();
@@ -110,7 +136,7 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
   }
 
   @override
-  Color backgroundColor() => const Color(0xFF87C7E9);
+  Color backgroundColor() => const Color(0x00000000);
 
   @override
   void onGameResize(Vector2 size) {
@@ -122,7 +148,9 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
   @override
   void update(double dt) {
     super.update(dt);
+    _applyProjectedHitPositions();
     if (_isGameOver) {
+      _syncSceneBridge();
       return;
     }
 
@@ -132,6 +160,11 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
       _triggerGameOver('时间到', win: false);
     }
     _timerText?.text = _formatTime(_timeRemaining);
+    final bridge = sceneBridge;
+    if (bridge != null) {
+      _debugText?.text = '3D pile:${bridge.renderedPileCount} slot:${bridge.renderedSlotCount}';
+    }
+    _syncSceneBridge();
   }
 
   @override
@@ -141,22 +174,16 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
       return;
     }
     _selectionCanceled = false;
-    _lastPanPosition = event.localPosition;
+    _lastPanPosition = event.canvasPosition;
 
-    final items = children.whereType<ItemComponent>().toList();
-    final hits = items.where((item) => item.containsPoint(event.localPosition)).toList();
-    if (hits.isEmpty) {
-      if (_binRect.contains(Offset(event.localPosition.x, event.localPosition.y))) {
+    final selected = _pickTopItem(event.canvasPosition);
+    if (selected == null) {
+      if (_binRect.contains(Offset(event.canvasPosition.x, event.canvasPosition.y))) {
         _cycleBinStyle();
       }
       return;
     }
-    hits.sort((a, b) {
-      final da = a.position.distanceToSquared(event.localPosition);
-      final db = b.position.distanceToSquared(event.localPosition);
-      return da.compareTo(db);
-    });
-    _activeItem = hits.first;
+    _activeItem = selected;
     _activeItem?.setHighlight(true);
   }
 
@@ -166,25 +193,20 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
     if (_selectionCanceled) {
       return;
     }
-    _lastPanPosition = event.localPosition;
-    if (!_binRect.contains(Offset(event.localPosition.x, event.localPosition.y))) {
+    final position = event.canvasEndPosition;
+    _lastPanPosition = position;
+    if (!_binRect.contains(Offset(position.x, position.y))) {
       _cancelSelection();
       _selectionCanceled = true;
       return;
     }
-    final items = children.whereType<ItemComponent>().toList();
-    final hits = items.where((item) => item.containsPoint(event.localPosition)).toList();
-    if (hits.isEmpty) {
+    final selected = _pickTopItem(position);
+    if (selected == null) {
       _activeItem?.clearHighlight();
       _activeItem = null;
       return;
     }
-    hits.sort((a, b) {
-      final da = a.position.distanceToSquared(event.localPosition);
-      final db = b.position.distanceToSquared(event.localPosition);
-      return da.compareTo(db);
-    });
-    final newItem = hits.first;
+    final newItem = selected;
     if (_activeItem != newItem) {
       _activeItem?.clearHighlight();
       _activeItem = newItem;
@@ -217,21 +239,16 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
       ?..position = Vector2(size.x / 2, size.y - 120)
       ..size = Vector2(size.x - 32, 96);
 
-    final binWidth = size.x - 60;
-    final binHeight = size.y * 0.55;
-    final binTop = 120.0;
-    _binRect = Rect.fromLTWH(30, binTop, binWidth, binHeight);
+    _binRect = _buildBinRect();
+    sceneBridge?.setBinRect(_binRect);
 
     _timerText?.position = Vector2(size.x / 2 - 42, 32);
     _levelText?.position = Vector2(28, 32);
     _stateText?.position = Vector2(size.x / 2, size.y / 2);
+    _debugText?.position = Vector2(size.x - 170, 80);
   }
 
   void _spawnItems() {
-    final binWidth = size.x - 60;
-    final binHeight = size.y * 0.55;
-    final binTop = 120.0;
-
     for (final entry in _levelItems) {
       final typeId = entry.typeId;
       final sprite = _sprites[typeId];
@@ -239,28 +256,32 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
         continue;
       }
       final position = Vector2(
-        30 + entry.x * binWidth,
-        binTop + entry.y * binHeight,
+        _binRect.left + entry.x * _binRect.width,
+        _binRect.top + entry.y * _binRect.height,
       );
       final item = ItemComponent(
+        renderId: 'item_${_itemSerial++}',
         typeId: typeId,
         sprite: sprite,
         position: position,
         size: Vector2(64, 64),
         depth: entry.depth,
+        showVisual: false,
       );
       _remainingItems += 1;
       add(item);
     }
 
-    final style = _binStyle ?? BinStyle.values[_levelIndex % BinStyle.values.length];
-    final binBackground = BinBackground(
-      position: Vector2(_binRect.left, _binRect.top),
-      size: Vector2(_binRect.width, _binRect.height),
-      style: style,
-    );
-    _binBackground = binBackground;
-    add(binBackground);
+    if (showBinBackground) {
+      final style = _binStyle ?? BinStyle.values[_levelIndex % BinStyle.values.length];
+      final binBackground = BinBackground(
+        position: Vector2(_binRect.left, _binRect.top),
+        size: Vector2(_binRect.width, _binRect.height),
+        style: style,
+      );
+      _binBackground = binBackground;
+      add(binBackground);
+    }
   }
 
   void _ensureSpawned() {
@@ -272,6 +293,9 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
   }
 
   void _spawnFlyToSlot(ItemComponent item, int targetIndex) {
+    if (!showSlotSprite) {
+      return;
+    }
     final sprite = _sprites[item.typeId];
     if (sprite == null) {
       return;
@@ -321,14 +345,14 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
       return;
     }
 
-    final targetIndex = slotBar.items.length;
-    final accepted = slotBar.addItem(
+    final insertIndex = slotBar.insertItem(
       SlotItem(
         typeId: _activeItem!.typeId,
         sprite: _sprites[_activeItem!.typeId]!,
+        sourceItemId: _activeItem!.renderId,
       ),
     );
-    if (!accepted) {
+    if (insertIndex == -1) {
       _triggerGameOver('槽位已满', win: false);
       _cancelSelection();
       return;
@@ -337,12 +361,24 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
     final item = _activeItem!;
     _cancelSelection();
 
-    _spawnFlyToSlot(item, targetIndex);
+    _spawnFlyToSlot(item, insertIndex);
+    sceneBridge?.addSlotFlight(
+      itemId: item.renderId,
+      typeId: item.typeId,
+      targetIndex: insertIndex,
+    );
+    _insertSlotItemComponent(insertIndex, item);
+    _relayoutSlotItems();
+    _pulseSlotItems();
+    sceneBridge?.removeItem(item.renderId);
     item.removeFromParent();
     _remainingItems -= 1;
 
     final matched = slotBar.resolveMatches();
     if (matched.isNotEmpty) {
+      _removeMatchedSlotItems(matched);
+      _relayoutSlotItems();
+      _pulseSlotItems();
       for (final match in matched) {
         final center = slotBar.slotCenterForIndex(match.index);
         final worldCenter = slotBar.position + center - Vector2(slotBar.size.x / 2, 0);
@@ -375,7 +411,8 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
     _sprites.clear();
 
     for (final entry in types.entries) {
-      final sprite = await _buildPlaceholderSprite(entry.key, entry.value);
+      final label = showSlotSprite ? entry.key : '';
+      final sprite = await _buildPlaceholderSprite(label, entry.value);
       _sprites[entry.key] = sprite;
     }
   }
@@ -403,23 +440,25 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
       ).createShader(rect);
     canvas.drawRRect(rrect, highlightPaint);
 
-    final textPainter = TextPainter(
-      text: TextSpan(
-        text: label,
-        style: const TextStyle(
-          color: Color(0xFFFFFFFF),
-          fontSize: 44,
-          fontWeight: FontWeight.w800,
+    if (label.isNotEmpty) {
+      final textPainter = TextPainter(
+        text: TextSpan(
+          text: label,
+          style: const TextStyle(
+            color: Color(0xFFFFFFFF),
+            fontSize: 44,
+            fontWeight: FontWeight.w800,
+          ),
         ),
-      ),
-      textDirection: TextDirection.ltr,
-    )..layout();
+        textDirection: TextDirection.ltr,
+      )..layout();
 
-    final textOffset = Offset(
-      (size.width - textPainter.width) / 2,
-      (size.height - textPainter.height) / 2,
-    );
-    textPainter.paint(canvas, textOffset);
+      final textOffset = Offset(
+        (size.width - textPainter.width) / 2,
+        (size.height - textPainter.height) / 2,
+      );
+      textPainter.paint(canvas, textOffset);
+    }
 
     final picture = recorder.endRecording();
     final image = await picture.toImage(size.width.toInt(), size.height.toInt());
@@ -508,8 +547,10 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
     _remainingItems = 0;
     _spawned = false;
     _levelLoaded = false;
+    _itemSerial = 0;
     _stateText?.text = '';
     _slotBar?.clear();
+    _clearSlotItemComponents();
     _binStyleIndex = (_binStyleIndex + 1) % BinStyle.values.length;
     _binStyle = BinStyle.values[_binStyleIndex];
 
@@ -518,12 +559,16 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
     children.whereType<MatchPop>().toList().forEach((c) => c.removeFromParent());
     children.whereType<BinBackground>().toList().forEach((c) => c.removeFromParent());
     _binBackground = null;
+    sceneBridge?.clear();
 
     await _loadLevel();
     _ensureSpawned();
   }
 
   void _cycleBinStyle() {
+    if (!showBinBackground) {
+      return;
+    }
     _binStyleIndex = (_binStyleIndex + 1) % BinStyle.values.length;
     _binStyle = BinStyle.values[_binStyleIndex];
     _binBackground?.removeFromParent();
@@ -534,6 +579,170 @@ class CatchGooseGame extends FlameGame with DragCallbacks {
     );
     _binBackground = binBackground;
     add(binBackground);
+  }
+
+  void _insertSlotItemComponent(int index, ItemComponent item) {
+    if (!showSlotSprite) {
+      return;
+    }
+    final slotBar = _slotBar;
+    if (slotBar == null) {
+      return;
+    }
+    final center = slotBar.slotCenterForIndex(index);
+    final worldCenter = slotBar.position + center - Vector2(slotBar.size.x / 2, 0);
+    final comp = SlotItemComponent(
+      typeId: item.typeId,
+      sprite: item.sprite,
+      position: worldCenter,
+      size: Vector2(44, 44),
+    );
+    _slotItemComponents.insert(index, comp);
+    add(comp);
+  }
+
+  void _relayoutSlotItems() {
+    if (!showSlotSprite) {
+      return;
+    }
+    final slotBar = _slotBar;
+    if (slotBar == null) {
+      return;
+    }
+    for (int i = 0; i < _slotItemComponents.length; i++) {
+      final center = slotBar.slotCenterForIndex(i);
+      final worldCenter = slotBar.position + center - Vector2(slotBar.size.x / 2, 0);
+      _slotItemComponents[i].moveTo(worldCenter);
+    }
+  }
+
+  void _pulseSlotItems() {
+    if (!showSlotSprite) {
+      return;
+    }
+    for (final comp in _slotItemComponents) {
+      comp.pulse();
+    }
+  }
+
+  void _removeMatchedSlotItems(List<ResolvedMatchItem> matched) {
+    final indices = matched.map((m) => m.index).toSet();
+    for (int i = _slotItemComponents.length - 1; i >= 0; i--) {
+      if (indices.contains(i)) {
+        _slotItemComponents[i].removeFromParent();
+        _slotItemComponents.removeAt(i);
+      }
+    }
+  }
+
+  void _clearSlotItemComponents() {
+    for (final comp in _slotItemComponents) {
+      comp.removeFromParent();
+    }
+    _slotItemComponents.clear();
+  }
+
+  void _syncSceneBridge() {
+    final bridge = sceneBridge;
+    if (bridge == null) {
+      return;
+    }
+    bridge.setBinRect(_binRect);
+    final slotBar = _slotBar;
+    if (slotBar != null) {
+      final centers = List<Offset>.generate(slotCapacity, (index) {
+        final localCenter = slotBar.slotCenterForIndex(index);
+        final worldCenter = slotBar.position + localCenter - Vector2(slotBar.size.x / 2, 0);
+        return Offset(worldCenter.x, worldCenter.y);
+      });
+      bridge.setSlotCenters(centers);
+    } else {
+      bridge.setSlotCenters(const []);
+    }
+    bridge.setSlots(
+      slotBar?.items
+              .map(
+                (item) => SceneSlotSnapshot(
+                  itemId: item.sourceItemId,
+                  typeId: item.typeId,
+                ),
+              )
+              .toList(growable: false) ??
+          const [],
+    );
+    bridge.setItems(
+      children.whereType<ItemComponent>().map(
+        (item) => SceneItemSnapshot(
+          id: item.renderId,
+          typeId: item.typeId,
+          x: item.scenePosition.x,
+          y: item.scenePosition.y,
+          size: item.size.x,
+          depth: item.depth,
+          highlighted: item.highlighted,
+        ),
+      ),
+    );
+  }
+
+  ItemComponent? _pickTopItem(Vector2 point) {
+    final hits = children
+        .whereType<ItemComponent>()
+        .where((item) => item.containsPoint(point))
+        .toList(growable: false);
+    if (hits.isEmpty) {
+      return null;
+    }
+    hits.sort((a, b) {
+      final da = a.hitPosition.distanceToSquared(point);
+      final db = b.hitPosition.distanceToSquared(point);
+      final delta = (da - db).abs();
+      if (delta > 420) {
+        return da.compareTo(db);
+      }
+      final depthCompare = a.cameraDepth.compareTo(b.cameraDepth);
+      if (depthCompare != 0) {
+        return depthCompare;
+      }
+      final yCompare = b.hitPosition.y.compareTo(a.hitPosition.y);
+      if (yCompare != 0) {
+        return yCompare;
+      }
+      return b.depth.compareTo(a.depth);
+    });
+    return hits.first;
+  }
+
+  void _applyProjectedHitPositions() {
+    final bridge = sceneBridge;
+    final centers = bridge?.projectedItemCenters;
+    final depths = bridge?.projectedItemDepths;
+    if (centers == null || centers.isEmpty || depths == null) {
+      return;
+    }
+    for (final item in children.whereType<ItemComponent>()) {
+      final projected = centers[item.renderId];
+      final cameraDepth = depths[item.renderId];
+      if (projected != null) {
+        item.setHitPosition(Vector2(projected.dx, projected.dy));
+      } else {
+        item.setHitPosition(item.scenePosition);
+      }
+      if (cameraDepth != null) {
+        item.setCameraDepth(cameraDepth);
+      } else {
+        item.setCameraDepth(double.infinity);
+      }
+    }
+  }
+
+  Rect _buildBinRect() {
+    final left = 28.0;
+    final top = 96.0;
+    final width = size.x - 56.0;
+    final maxBottom = size.y - 152.0;
+    final height = (maxBottom - top).clamp(220.0, size.y * 0.72);
+    return Rect.fromLTWH(left, top, width, height);
   }
 }
 
