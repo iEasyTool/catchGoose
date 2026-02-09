@@ -422,7 +422,9 @@ class CatchGoose3DGame extends FlameGame3D<World3D, CameraComponent3D> {
   double _computeScale(SceneItemSnapshot item, Rect rect, String modelKey) {
     final norm = _normalizationByTypedAsset[modelKey] ?? 1.0;
     final sizeRatio = (item.size / rect.width).clamp(0.05, 0.22);
-    var scale = sizeRatio * _binWorldWidth * 0.9 * norm;
+    final ny = ((item.y - rect.top) / rect.height).clamp(0.0, 1.0);
+    final topCompensation = (1.22 - ny * 0.34).clamp(0.9, 1.25);
+    var scale = sizeRatio * _binWorldWidth * 0.9 * norm * topCompensation;
     if (item.highlighted) {
       scale *= 1.28;
     }
@@ -508,26 +510,11 @@ class CatchGoose3DGame extends FlameGame3D<World3D, CameraComponent3D> {
   }
 
   static const Map<String, List<String>> _assetsByType = {
-    'A': [
-      '3d/cheese.glb',
-      '3d/coockie-man.glb',
-    ],
-    'B': [
-      '3d/hotdog.glb',
-      '3d/toast.glb',
-    ],
-    'C': [
-      '3d/sandwich.glb',
-      '3d/sandwich-toast.glb',
-    ],
-    'D': [
-      '3d/ice-cream.glb',
-      '3d/coockie-man.glb',
-    ],
-    'E': [
-      '3d/pancake-big.glb',
-      '3d/toast.glb',
-    ],
+    'A': ['3d/cheese.glb'],
+    'B': ['3d/hotdog.glb'],
+    'C': ['3d/sandwich.glb'],
+    'D': ['3d/ice-cream.glb'],
+    'E': ['3d/pancake-big.glb'],
   };
 
   static const Map<String, Color> _typeTint = {

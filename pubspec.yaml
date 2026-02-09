@@ -64,6 +64,7 @@ flutter:
     - assets/3d/sandwich-toast.glb
     - assets/3d/toast.glb
     - assets/levels/
+    - assets/levels/level_001.json
 
   # To add assets to your application, add an assets section, like this:
   # assets:

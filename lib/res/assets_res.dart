@@ -11,4 +11,5 @@ class AssetsRes {
   static const String COOCKIE_MAN = 'assets/3d/coockie-man.glb';
   static const String SANDWICH_TOAST = 'assets/3d/sandwich-toast.glb';
   static const String TOAST = 'assets/3d/toast.glb';
+  static const String LEVEL_001 = 'assets/levels/level_001.json';
 }
